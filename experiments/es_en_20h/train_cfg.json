@@ -1,0 +1,19 @@
+{
+    "gpuid": 1,
+    "lr": 0.001,
+    "teach_ratio": 0.8,
+    "optimizer": 0,
+    "grad_noise_eta": 0,
+    "iters_save_model": 20,
+    "zero_input": 0.1,
+    "speech_noise": 0.25,
+    "iter_weight_noise": 0,
+    "weight_noise_mean": 0.0,
+    "weight_noise_sigma": 0.01,
+    "batch_size": {
+        "max": 32,
+        "med": 32,
+        "min": 32,
+        "scale": 1
+    }
+}

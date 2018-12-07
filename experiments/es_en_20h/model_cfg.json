@@ -1,0 +1,67 @@
+{
+    "data_path": "../speech2text/mfcc_13dim",
+    "enc_key": "sp",
+    "dec_key": "bpe_w",
+    "map_path": "./data/fisher/fisher.map",
+    "vocab_path": "./data/fisher/fisher.vocab",
+    "info_path": "./data/fisher/fisher_20h.info",
+    "sp_dim": 13,
+    "bi_rnn": true,
+    "train_set": "fisher_train",
+    "dev_set": "fisher_dev",
+    "ln": false,
+    "bn": true,
+    "l2": 0.0001,
+    "grad_clip": 2,
+    "embed_dropout": 0.3,
+    "rnn_dropout": 0.3,
+    "out_dropout": 0,
+    "rnn_relu": false,
+    "random_out": false,
+    "random_out_prob": 0.7,
+    "hidden_units": 256,
+    "embedding_units": 128,
+    "attn_units": 512,
+    "enc_layers": 3,
+    "dec_layers": 3,
+    "highway_layers": 0,
+    "buckets_num": 20,
+    "buckets_width": 80,
+    "max_en_pred": 175,
+    "train_scale": 1,
+    "seed": "seed-swbd1-train-100k",
+    "cnn_layers": [
+        {
+            "in_channels": null,
+            "out_channels": 128,
+            "ksize": [
+                9,
+                13
+            ],
+            "stride": [
+                2,
+                13
+            ],
+            "pad": [
+                4,
+                0
+            ]
+        },
+        {
+            "in_channels": null,
+            "out_channels": 512,
+            "ksize": [
+                9,
+                1
+            ],
+            "stride": [
+                2,
+                1
+            ],
+            "pad": [
+                4,
+                0
+            ]
+        }
+    ]
+}
