@@ -1,3 +1,7 @@
+# NOTE!
+
+This repository is currently being refactored, and therefore files may change.
+
 ## Automatic Speech-to-Text (AST)
 
 Sequence-to-sequence model to train speech-to-text systems.
@@ -5,6 +9,16 @@ Sequence-to-sequence model to train speech-to-text systems.
 Reference:
 [*Pre-training on high-resource speech recognition improves low-resource speech-to-text translation*, Sameer Bansal, Herman Kamper, Karen Livescu, Adam Lopez, Sharon Goldwater](https://arxiv.org/abs/1809.01431)
 
+
+## Fisher data
+
+We preprocessed the English translations released by:
+
+[*Improved Speech-to-Text Translation with the Fisher and Callhome Spanish–English Speech Translation Corpus*, Matt Post, Gaurav Kumar, Adam Lopez, Damianos Karakos, Chris Callison-Burch and Sanjeev Khudanpur, IWSLT 2013](https://joshua.incubator.apache.org/data/fisher-callhome-corpus)
+
+and make them available here. 
+
+Fisher Spanish speech data is available from [LDC (*LDC2010S01*) ](https://catalog.ldc.upenn.edu/LDC2010S01)
 
 ## Installation
 
@@ -50,6 +64,4 @@ True
 7) install tqdm for progress bar support
 
 ```conda install tqdm ```
-
-8)
 
