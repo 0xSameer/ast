@@ -15,6 +15,7 @@ Author: Sameer Bansal
 
 from seq2seq import SpeechEncoderDecoder
 from config import Config
+from dataloader import FisherDataLoader
 
 import cupy
 from chainer import cuda, Function, utils, Variable
@@ -34,31 +35,21 @@ program_descrp = """run nmt experiments"""
 _ADAM = 0
 _SGD = 1
 
-# Special vocabulary symbols - we always put them at the start.
-PAD = b"_PAD"
-GO = b"_GO"
-EOS = b"_EOS"
-UNK = b"_UNK"
-START_VOCAB = [PAD, GO, EOS, UNK]
-
-PAD_ID = 0
-GO_ID = 1
-EOS_ID = 2
-UNK_ID = 3
-
 
 class NN:
     def __init__(self, cfg_path):
         self.cfg = Config(cfg_path)
 
         # Define model data related paths
-        self.model_dir = self.cfg["model_dir"]
+        self.model_dir = self.cfg.model["model_dir"]
 
         # Store gpuid locally
         self.gpuid = self.cfg.train["gpuid"]
 
         # Load data dictionaries
-        self.load_data()
+        self.data_loader = FisherDataLoader(self.cfg.train["data"],
+                                            self.model_dir,
+                                            self.gpuid)
 
         """
         Seq2Seq model
@@ -150,6 +141,10 @@ class NN:
             print("-"*80)
             print('model not found')
 
+
+    def train_epoch(self):
+        total_loss = 0
+        for batch in self.data_loader.get_batch(32, train=True, labels=True):print(b["X"].shape, b["y"].shape);
 
 
     

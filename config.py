@@ -20,10 +20,10 @@ class Config:
             self.train = json.load(train_f)
 
         # Get vocabulary size to initialize decoder embeddings
-        vocab = pickle.load(open(self.train["data_path"]["vocab_path"], "rb"))
-        vocab_size = len(vocab[self.train['dec_key']]['w2i'])
+        vocab = pickle.load(open(self.train["data"]["vocab_path"], "rb"))
+        vocab_size = len(vocab[self.train["data"]['dec_key']]['w2i'])
         self.model["rnn_config"]["dec_vocab_size"] = vocab_size
-        print("vocab size {0:s} = {1:d}".format(self.cfg.train['dec_key'], 
+        print("vocab size {0:s} = {1:d}".format(self.train["data"]['dec_key'], 
                                                 vocab_size))
 
         self.model["model_dir"] = cfg_path

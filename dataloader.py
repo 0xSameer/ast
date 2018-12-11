@@ -10,6 +10,29 @@ Author: Sameer Bansal
 
 from preprocessing import prep_buckets
 from eval import Eval
+import cupy
+from chainer import cuda, Variable
+import chainer.functions as F
+import numpy as np
+import pickle
+import os
+
+import random
+
+import chainer.functions as F
+
+# Special vocabulary symbols - we always put them at the start.
+PAD = b"_PAD"
+GO = b"_GO"
+EOS = b"_EOS"
+UNK = b"_UNK"
+START_VOCAB = [PAD, GO, EOS, UNK]
+
+PAD_ID = 0
+GO_ID = 1
+EOS_ID = 2
+UNK_ID = 3
+
 
 class DataLoader:
     def __init__(self):
@@ -17,14 +40,16 @@ class DataLoader:
         self.vocab = {}
         self.info = {}
 
-    def get_batch(self, batch_size, set_key, labels=False):
+    def get_batch(self, batch_size, train=True, labels=False):
         raise NotImplementedError
 
 
 class FisherDataLoader(DataLoader):
-    def __init__(self, data_cfg):
+    def __init__(self, data_cfg, model_dir, gpuid):
         super().__init__()
+        self.gpuid = gpuid
         self.data_cfg = data_cfg
+        self.model_dir = model_dir
         print("Loading data dictionaries")
         self.map = pickle.load(open(data_cfg["map_path"], "rb"))
         self.vocab = pickle.load(open(data_cfg["vocab_path"], "rb"))
@@ -35,9 +60,16 @@ class FisherDataLoader(DataLoader):
                                             data_cfg['buckets_num'], 
                                             data_cfg['buckets_width'], 
                                             key="sp", 
-                                            scale=data_cfg['buckets_width'], 
+                                            scale=data_cfg["train_scale"], 
                                             seed='haha',
                                             info_path=data_cfg['info_path'])
+
+        # Get total number of utterances
+        train_key = self.data_cfg["train_set"]
+        self.n_train = len([u for bucket in self.buckets[train_key]["buckets"] for u in bucket])
+
+        dev_key = self.data_cfg["dev_set"]
+        self.n_dev = len([u for bucket in self.buckets[dev_key]["buckets"] for u in bucket])
 
 
         print("Loading references for evaluation")
@@ -45,7 +77,9 @@ class FisherDataLoader(DataLoader):
                                   data_cfg['dev_set'])
         self.metrics = Eval(evals_path, data_cfg['n_evals'])
 
+
     def _drop_frames(self, x_data, drop_rate):
+        xp = cuda.cupy if self.gpuid >= 0 else np
         sp_mask = xp.ones(len(x_data), dtype=xp.float32)
         num_drop_frame = int(drop_rate * len(x_data))
         if num_drop_frame > 0:
@@ -56,23 +90,31 @@ class FisherDataLoader(DataLoader):
         else:
             return x_data
 
-    def load_speech(self, utt, set_key, max_sp):
+    def _load_speech(self, utt, set_key, max_sp):
+        xp = cuda.cupy if self.gpuid >= 0 else np
         # Path for speech files
-        SP_PATH = os.path.join(self.cfg.train["speech_path"], set_key)
+        SP_PATH = os.path.join(self.data_cfg["speech_path"], set_key)
         utt_path = os.path.join(SP_PATH, "{0:s}.npy".format(utt))
         if not os.path.exists(utt_path):
             utt_path = os.path.join(SP_PATH, utt.split('_',1)[0], 
                                     "{0:s}.npy".format(utt))
         x_data = xp.load(utt_path)[:max_sp]
         # Drop frames if training
-        if "train" in set_key and self.cfg.train["zero_input"] > 0:
-            x_data = self._drop_frames(x_data, self.cfg.train["zero_input"])
+        if "train" in set_key and self.data_cfg["zero_input"] > 0:
+            x_data = self._drop_frames(x_data, self.data_cfg["zero_input"])
 
         return x_data
 
 
-    def get_batch(self, batch_size, set_key, labels=False):
+    def get_batch(self, batch_size, train=True, labels=False):
+        xp = cuda.cupy if self.gpuid >= 0 else np
+
         batches = []
+
+        if train:
+            set_key = self.data_cfg["train_set"]
+        else:
+            set_key = self.data_cfg["dev_set"]
         
         num_b = self.buckets[set_key]["num_b"]
         width_b = self.buckets[set_key]["width_b"]
@@ -80,8 +122,8 @@ class FisherDataLoader(DataLoader):
 
         
         if labels:
-            dec_key = self.cfg.train["dec_key"]
-            max_pred = self.cfg.train["max_pred"]
+            dec_key = self.data_cfg["dec_key"]
+            max_pred = self.data_cfg["max_pred"]
 
         for b, bucket in enumerate(self.buckets[set_key]["buckets"]):
             # Shuffle utterances in a bucket
@@ -102,7 +144,7 @@ class FisherDataLoader(DataLoader):
                 batch_data["y"] = []
 
             for u in utts:
-                batch_data["X"].append(self.load_speech(u, set_key, max_sp))
+                batch_data["X"].append(self._load_speech(u, set_key, max_sp))
                 if labels:                    
                     en_ids = [self.vocab[dec_key]['w2i'].get(w, UNK_ID) 
                               for w in self.map[set_key][u][dec_key]]

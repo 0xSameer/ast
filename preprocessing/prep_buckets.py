@@ -48,7 +48,7 @@ def create_buckets(cat_dict, num_b, width_b, key, scale, seed):
                     'width_b': width_b}
 
     # loop over all utterances and categorize them into respective buckets
-    for utt_id in tqdm(cat_dict):
+    for utt_id in tqdm(cat_dict, ncols=80):
         bucket = min(cat_dict[utt_id][key] // width_b, num_b-1)
         buckets_info['buckets'][bucket].append(utt_id)
     # end for
