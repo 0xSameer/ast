@@ -1,19 +1,39 @@
 {
+    "seed": "seed-swbd1-train-100k",
     "gpuid": 1,
-    "lr": 0.001,
-    "teach_ratio": 0.8,
-    "optimizer": 0,
-    "grad_noise_eta": 0,
     "iters_save_model": 20,
-    "zero_input": 0.1,
-    "speech_noise": 0.25,
-    "iter_weight_noise": 0,
-    "weight_noise_mean": 0.0,
-    "weight_noise_sigma": 0.01,
-    "batch_size": {
-        "max": 32,
-        "med": 32,
-        "min": 32,
-        "scale": 1
-    }
+    "data":
+        {
+        "enc_key": "sp",
+        "dec_key": "bpe_w",
+        "max_pred": 175,
+        "train_set": "fisher_train",
+        "dev_set": "fisher_dev",
+        "speech_path": "../speech2text/mfcc_13dim",
+        "map_path": "./data/fisher/fisher.map",
+        "vocab_path": "./data/fisher/fisher.vocab",
+        "info_path": "./data/fisher/fisher_20h.info",
+        "refs_path": "./data/fisher/refs",
+        "n_evals": 4,
+        "buckets_num": 20,
+        "buckets_width": 80,
+        "train_scale": 1,
+        "zero_input": 0.1,
+        },
+    "optimizer":
+        {
+            "type": 0,
+            "lr": 0.001,
+            "l2": 0.0001,
+            "grad_clip": 2,
+            "grad_noise_eta": 0,
+            "freeze": []
+        },
+    "batch_size": 
+        {
+            "max": 32,
+            "med": 32,
+            "min": 32,
+            "scale": 1
+        }
 }
