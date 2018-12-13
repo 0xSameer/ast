@@ -1,17 +1,17 @@
 {
-    "seed": "seed-swbd1-train-100k",
+    "seed": "seed-ast-20h",
     "gpuid": 1,
     "iters_save_model": 20,
+    "train_set": "fisher_train",
+    "dev_set": "fisher_dev",
     "data":
         {
             "enc_key": "sp",
             "dec_key": "bpe_w",
-            "max_pred": 175,
-            "train_set": "fisher_train",
-            "dev_set": "fisher_dev",
             "speech_path": "../speech2text/mfcc_13dim",
             "map_path": "./data/fisher/fisher.map",
             "vocab_path": "./data/fisher/fisher.vocab",
+            "max_pred": 175,
             "info_path": "./data/fisher/fisher_20h.info",
             "refs_path": "./data/fisher/refs",
             "n_evals": 4,

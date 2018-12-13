@@ -22,16 +22,18 @@ import random
 import chainer.functions as F
 
 # Special vocabulary symbols - we always put them at the start.
-PAD = b"_PAD"
-GO = b"_GO"
-EOS = b"_EOS"
-UNK = b"_UNK"
-START_VOCAB = [PAD, GO, EOS, UNK]
 
-PAD_ID = 0
-GO_ID = 1
-EOS_ID = 2
-UNK_ID = 3
+class SYMBOLS:
+    PAD = b"_PAD"
+    GO = b"_GO"
+    EOS = b"_EOS"
+    UNK = b"_UNK"
+    START_VOCAB = [PAD, GO, EOS, UNK]
+
+    PAD_ID = 0
+    GO_ID = 1
+    EOS_ID = 2
+    UNK_ID = 3
 
 
 class DataLoader:
@@ -65,17 +67,17 @@ class FisherDataLoader(DataLoader):
                                             info_path=data_cfg['info_path'])
 
         # Get total number of utterances
-        train_key = self.data_cfg["train_set"]
-        self.n_train = len([u for bucket in self.buckets[train_key]["buckets"] for u in bucket])
+        self.n_utts = {}
+        for key in self.buckets:
+            self.n_utts[key] = len([u for bucket in self.buckets[key]["buckets"] for u in bucket])
 
-        dev_key = self.data_cfg["dev_set"]
-        self.n_dev = len([u for bucket in self.buckets[dev_key]["buckets"] for u in bucket])
-
-
-        print("Loading references for evaluation")
-        evals_path = os.path.join(data_cfg['refs_path'], 
-                                  data_cfg['dev_set'])
-        self.metrics = Eval(evals_path, data_cfg['n_evals'])
+        # print("Loading references for evaluation")
+        # self.refs = {}
+        # for key in self.buckets:
+        #     evals_path = os.path.join(data_cfg['refs_path'], key)
+        #     if os.path.exists(evals_path):
+        #         print("loading refs for: {0:s}".format(key))
+        #     self.refs[key] = Eval(evals_path, data_cfg['n_evals'])
 
 
     def _drop_frames(self, x_data, drop_rate):
@@ -106,15 +108,10 @@ class FisherDataLoader(DataLoader):
         return x_data
 
 
-    def get_batch(self, batch_size, train=True, labels=False):
+    def get_batch(self, batch_size, set_key, train, labels=False):
         xp = cuda.cupy if self.gpuid >= 0 else np
 
         batches = []
-
-        if train:
-            set_key = self.data_cfg["train_set"]
-        else:
-            set_key = self.data_cfg["dev_set"]
         
         num_b = self.buckets[set_key]["num_b"]
         width_b = self.buckets[set_key]["width_b"]
@@ -139,23 +136,29 @@ class FisherDataLoader(DataLoader):
 
         # Generator for batches
         for (utts, b) in batches:
-            batch_data = {"X": []}
+            batch_data = {"X": [], "utts": []}
+
             if labels:
                 batch_data["y"] = []
 
             for u in utts:
                 batch_data["X"].append(self._load_speech(u, set_key, max_sp))
                 if labels:                    
-                    en_ids = [self.vocab[dec_key]['w2i'].get(w, UNK_ID) 
+                    en_ids = [self.vocab[dec_key]['w2i'].get(w, SYMBOLS.UNK_ID) 
                               for w in self.map[set_key][u][dec_key]]
 
-                    y_ids = [GO_ID] + en_ids[:max_pred-2] + [EOS_ID]
+                    y_ids = [SYMBOLS.GO_ID] + en_ids[:max_pred-2] + [SYMBOLS.EOS_ID]
                     batch_data["y"].append(xp.asarray(y_ids, dtype=xp.int32))
 
             # end for utts
-            batch_data['X'] = F.pad_sequence(batch_data['X'], padding=PAD_ID)
+            # include the utt ids
+            batch_data['utts'].extend(utts) 
+            batch_data['X'] = F.pad_sequence(batch_data['X'], 
+                                             padding=SYMBOLS.PAD_ID)
+            batch_data['X'].to_gpu(self.gpuid)
             if labels:
                 batch_data['y'] = F.pad_sequence(batch_data['y'], 
-                                                 padding=PAD_ID)
+                                             padding=SYMBOLS.PAD_ID)
+                batch_data['y'].to_gpu(self.gpuid)
 
             yield batch_data

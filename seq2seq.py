@@ -14,6 +14,10 @@ import chainer.functions as F
 import cupy
 from chainer import cuda, Function, utils, Variable
 import math
+import numpy as np
+import random
+
+from dataloader import SYMBOLS
 
 class SpeechEncoderDecoder(chainer.Chain):
     def __init__(self, gpuid, cfg):
@@ -23,7 +27,7 @@ class SpeechEncoderDecoder(chainer.Chain):
 
         super(SpeechEncoderDecoder, self).__init__()
 
-        self.dropout = cfg["dropout"]
+        self.cfg = cfg
 
         self.init_cnn(cfg["cnn_config"])
         self.init_enc_dec_attn(cfg["rnn_config"])
@@ -45,7 +49,6 @@ class SpeechEncoderDecoder(chainer.Chain):
                 l["dilate"] = 1
             lname = "CNN_{0:d}".format(i)
             self.cnns.append(lname)
-            # print("nobias = ", self.cnn_bn)
             self.add_link(lname, L.Convolution2D(**l,
                                                  initialW=w,
                                                  nobias=self.cnn_bn))
@@ -111,7 +114,6 @@ class SpeechEncoderDecoder(chainer.Chain):
             self.add_link(rnn_name, L.LSTM(None, dec_lstm_units))
             # Add layer normalization
             if RNN_CONFIG['ln']:
-                print("hahahaha")
                 self.add_link("{0:s}_ln".format(rnn_name), 
                           L.LayerNormalization(RNN_CONFIG['hidden_units']))
         # end for
@@ -168,7 +170,7 @@ class SpeechEncoderDecoder(chainer.Chain):
             """
             Apply rnn
             """
-            hs = F.dropout(self[rnn_layer](hs), ratio=self.dropout["rnn"])
+            hs = F.dropout(self[rnn_layer](hs), ratio=self.cfg["dropout"]["rnn"])
             # layer normalization
             if self.rnn_ln:
                 ln_name = "{0:s}_ln".format(rnn_layer)
@@ -210,12 +212,26 @@ class SpeechEncoderDecoder(chainer.Chain):
         self.enc_states = F.swapaxes(self.enc_states, 0, 1)
 
     def encode(self, X):
+        # ---------------------------------------------------------------------
+        # check whether to add noise to speech input
+        # ---------------------------------------------------------------------
+        if self.cfg["extras"]["speech_noise"] > 0 and chainer.config.train:
+            # due to CUDA issues with random number generator
+            # creating a numpy array and moving to GPU
+            noise = Variable(np.random.normal(1.0,
+                                          self.cfg["extras"]["speech_noise"],
+                                              size=X.shape).astype(np.float32))
+            if self.gpuid >= 0:
+                noise.to_gpu(self.gpuid)
+            X = X * noise
+
         # call cnn logic
         h = self.forward_cnn(X)
-        print(h.shape)
+        # print("cnn out", h.shape)
         # call rnn logic
         self.forward_rnn_encode(h)
-        print(self.enc_states[0].shape)
+        # print("rnn out", self.enc_states[0].shape)
+
 
     def set_decoder_state(self):
         """
@@ -264,7 +280,7 @@ class SpeechEncoderDecoder(chainer.Chain):
         # ---------------------------------------------------------------------
         # get embedding
         # ---------------------------------------------------------------------
-        embed_id = F.dropout(self.embed_dec(word), ratio=self.dropout['embed'])
+        embed_id = F.dropout(self.embed_dec(word), ratio=self.cfg["dropout"]['embed'])
         # ---------------------------------------------------------------------
         # apply rnn - input feeding, use previous ht
         # ---------------------------------------------------------------------
@@ -282,87 +298,118 @@ class SpeechEncoderDecoder(chainer.Chain):
         # ---------------------------------------------------------------------
         # make prediction
         # ---------------------------------------------------------------------
-        predicted_out = F.dropout(self.out(ht), ratio=self.dropout['out'])
+        predicted_out = F.dropout(self.out(ht), ratio=self.cfg["dropout"]['out'])
         # ---------------------------------------------------------------------
         return predicted_out, ht, alphas
         
 
-    def train_decode(self, decoder_batch, teacher_ratio):
+    def forward_loss(self, X, y):
         xp = cuda.cupy if self.gpuid >= 0 else np
-        batch_size = decoder_batch.shape[1]
+        batch_size = X.shape[0]
+        
+        # encode input
+        self.encode(X)
+        
+        # initialize decoder LSTM to final encoder state
+        self.set_decoder_state()
+        
+        # swap axes of the decoder batch        
+        y = F.swapaxes(y, 0, 1)
+        """
+        Initialize loss
+        Compute loss at each predicted step for target text
+        """
         loss = 0
-        # ---------------------------------------------------------------------
-        # initialize hidden states as a zero vector
-        # ---------------------------------------------------------------------
-        a_units = self.m_cfg['attn_units']
+        teacher_ratio = self.cfg["extras"]["teach_ratio"]
+        
+        """
+        Initialize attention to zeros
+        """
+        a_units = self.cfg["rnn_config"]['attn_units']
         ht = Variable(xp.zeros((batch_size, a_units), dtype=xp.float32))
-        # ---------------------------------------------------------------------
-        decoder_input = decoder_batch[0]
+        
         # for all sequences in the batch, feed the characters one by one
-        for curr_word, next_word in zip(decoder_batch, decoder_batch[1:]):
-            # -----------------------------------------------------------------
-            # teacher forcing logic
-            # -----------------------------------------------------------------
-            use_label = True if random.random() < teacher_ratio else False
-            if use_label:
-                decoder_input = curr_word
-            # -----------------------------------------------------------------
-            # encode tokens
-            # -----------------------------------------------------------------
-            predicted_out, ht = self.decode(decoder_input, ht)
-            decoder_input = F.argmax(predicted_out, axis=1)
-            # -----------------------------------------------------------------
-            # compute loss
-            # -----------------------------------------------------------------
-            if "random_out" in self.m_cfg and self.m_cfg["random_out"] == True:
-                t_alt = xp.copy(next_word.data)
-                # sample and replace each element in the batch
-                for i in range(len(t_alt)):
-                    # use_sample = True if random.random() > self.m_cfg["sample_out_prob"] else False
-                    if int(t_alt[i]) >= 4 and random.random() > self.m_cfg["random_out_prob"]:
-                        t_alt[i] = xp.random.randint(4, self.v_size_en+1)
-
-                loss_arr = F.softmax_cross_entropy(predicted_out, t_alt,
-                                               class_weight=self.mask_pad_id)
+        for i, (curr_word, next_word) in enumerate(zip(y, y[1:])):
+            # print("decode", i, curr_word, next_word)
+            
+            """ 
+            Check whether to use predicted token or true token from 
+            previous time step
+            Always use true token for GO and EOS
+            """
+            if (i > 0) and (i < (len(y)-2)):
+                use_true = random.random() < teacher_ratio
+                if use_true:
+                    decoder_input = curr_word
             else:
-                loss_arr = F.softmax_cross_entropy(predicted_out, next_word,
+                decoder_input = curr_word
+            
+            """
+            Decode current token -- we get the softmax output
+            """
+            predicted_out, ht, _ = self.decode_step(decoder_input, ht)
+
+            """
+            Set the decoder_input for the next step to the current
+            most likely prediction
+            """
+            decoder_input = F.argmax(predicted_out, axis=1)
+            
+            """
+            Compute loss between predicted and true word
+
+            If random out enabled, replace target word with another
+            word type from the vocabulary
+            """
+            target_word = xp.copy(next_word.data)
+            if self.cfg["extras"]["random_out"] > 0:
+                # sample and replace each element in the batch
+                # if not special symbol < 4
+                n_special = len(SYMBOLS.START_VOCAB)
+                for i in range(len(target_word)):
+                    if ((int(target_word[i]) >= n_special) and 
+                        (random.random() > self.cfg["extras"]["random_out"])):
+                        target_word[i] = xp.random.randint(n_special, 
+                                    self.cfg["rnn_config"]["dec_vocab_size"]+1)
+            # end replace target word
+
+            curr_loss = F.softmax_cross_entropy(predicted_out, target_word,
                                                class_weight=self.mask_pad_id)
-            loss += loss_arr
+            loss += curr_loss
             # -----------------------------------------------------------------
+        
         return loss
 
-    def predict_batch(self, batch_size, pred_limit, y=None, display=False):
+    def predict(self, X, start_token, end_token, stop_limit):
+
         xp = cuda.cupy if self.gpuid >= 0 else np
-        # max number of predictions to make
-        # if labels are provided, this variable is not used
-        stop_limit = pred_limit
-        # to track number of predictions made
-        npred = 0
-        # to store loss
-        loss = 0
-        # if labels are provided, use them for computing loss
-        compute_loss = True if y is not None else False
-        # ---------------------------------------------------------------------
-        if compute_loss:
-            stop_limit = len(y)-1
-            # get starting word to initialize decoder
-            curr_word = y[0]
-        else:
-            # intialize starting word to GO_ID symbol
-            curr_word = Variable(xp.full((batch_size,), GO_ID, dtype=xp.int32))
-        # ---------------------------------------------------------------------
-        # flag to track if all sentences in batch have predicted EOS
-        # ---------------------------------------------------------------------
+        batch_size = X.shape[0]
+        
+        # encode input
+        self.encode(X)
+        
+        # initialize decoder LSTM to final encoder state
+        self.set_decoder_state()
+        
+        # Flags to keep track whether EOS has been predicted for all
         with cupy.cuda.Device(self.gpuid):
             check_if_all_eos = xp.full((batch_size,), False, dtype=xp.bool_)
-        # ---------------------------------------------------------------------
-        a_units = self.m_cfg['attn_units']
+        """
+        Initialize attention to zeros
+        """
+        a_units = self.cfg["rnn_config"]['attn_units']
         ht = Variable(xp.zeros((batch_size, a_units), dtype=xp.float32))
-        # ---------------------------------------------------------------------
+
+        npred = 0
+
+        # Starting token
+        curr_word = Variable(xp.full((batch_size,), 
+                             start_token, dtype=xp.int32))
+        
+        # loop till prediction limit or end_token predicted
         while npred < (stop_limit):
-            # -----------------------------------------------------------------
             # decode and predict
-            pred_out, ht = self.decode(curr_word, ht)
+            pred_out, ht, _ = self.decode_step(curr_word, ht)
             pred_word = F.argmax(pred_out, axis=1)
             # -----------------------------------------------------------------
             # save prediction at this time step
@@ -372,112 +419,19 @@ class SpeechEncoderDecoder(chainer.Chain):
             else:
                 pred_sents = xp.vstack((pred_sents, pred_word.data))
             # -----------------------------------------------------------------
-            if compute_loss:
-                # compute loss
-                loss += F.softmax_cross_entropy(pred_out, y[npred+1],
-                                                   class_weight=self.mask_pad_id)
-            # -----------------------------------------------------------------
+
             curr_word = pred_word
             # check if EOS is predicted for all sentences
             # -----------------------------------------------------------------
-            check_if_all_eos[pred_word.data == EOS_ID] = True
-            # if xp.all(check_if_all_eos == EOS_ID):
+            check_if_all_eos[pred_word.data == end_token] = True
             if xp.all(check_if_all_eos):
                 break
             # -----------------------------------------------------------------
             # increment number of predictions made
             npred += 1
             # -----------------------------------------------------------------
-        return pred_sents.T, loss
+        
+        return pred_sents.T
+    
 
-    def forward(self, X, add_noise=0, teacher_ratio=0, y=None):
-        # get shape
-        X.to_gpu(self.gpuid)
-        batch_size = X.shape[0]
-        # check whether to add noi, start=1se
-        # ---------------------------------------------------------------------
-        # check whether to add noise to speech input
-        # ---------------------------------------------------------------------
-        if add_noise > 0 and chainer.config.train:
-            # due to CUDA issues with random number generator
-            # creating a numpy array and moving to GPU
-            noise = Variable(np.random.normal(1.0,
-                                              add_noise,
-                                              size=X.shape).astype(np.float32))
-            if self.gpuid >= 0:
-                noise.to_gpu(self.gpuid)
-            X = X * noise
-        # ---------------------------------------------------------------------
-        # encode input
-        # ---------------------------------------------------------------------
-        self.forward_enc(X)
-        # -----------------------------------------------------------------
-        # initialize decoder LSTM to final encoder state
-        # -----------------------------------------------------------------
-        self.set_decoder_state()
-        # -----------------------------------------------------------------
-        # swap axes of the decoder batch
-        if y is not None:
-            y = F.swapaxes(y, 0, 1)
-        # -----------------------------------------------------------------
-        # check if train or test
-        # -----------------------------------------------------------------
-        if chainer.config.train:
-            # -------------------------------------------------------------
-            # decode
-            # -------------------------------------------------------------
-            self.loss = self.decode_batch(y, teacher_ratio)
-            # -------------------------------------------------------------
-            # make return statements consistent
-            return [], self.loss
-        else:
-            # -------------------------------------------------------------
-            # predict
-            # -------------------------------------------------------------
-            # make return statements consistent
-            return(self.predict_batch(batch_size=batch_size,
-                                      pred_limit=self.m_cfg['max_en_pred'],
-                                      y=y))
-        # -----------------------------------------------------------------
-
-    def add_lstm_weight_noise(self, rnn_layer, mu, sigma):
-        xp = cuda.cupy if self.gpuid >= 0 else np
-        # W_shape = self[rnn_layer].W.W.shape
-        # b_shape = self[rnn_layer].W.b.shape
-        rnn_params = ["upward", "lateral"]
-        for p in rnn_params:
-            # add noise to W
-            s_w = xp.random.normal(mu,
-                                   sigma,
-                                   self[rnn_layer][p].W.shape,
-                                   dtype=xp.float32)
-
-            self[rnn_layer][p].W.data = self[rnn_layer][p].W.data + s_w
-
-            if p == "upward":
-                s_b = xp.random.normal(mu,
-                                       sigma,
-                                       self[rnn_layer][p].b.shape,
-                                       dtype=xp.float32)
-                self[rnn_layer][p].b.data = self[rnn_layer][p].b.data + s_b
-
-    def add_weight_noise(self, mu, sigma):
-        xp = cuda.cupy if self.gpuid >= 0 else np
-        # add noise to rnn weights
-        if self.bi_rnn:
-            rnn_layers = self.rnn_enc + self.rnn_rev_enc + self.rnn_dec
-        else:
-            rnn_layers = self.rnn_enc + self.rnn_dec
-
-        for rnn_layer in rnn_layers:
-            self.add_lstm_weight_noise(rnn_layer, mu, sigma)
-
-        # add noise to decoder embeddings
-        self.embed_dec.W.data = (self.embed_dec.W.data +
-                                   xp.random.normal(mu,
-                                                    sigma,
-                                                    self.embed_dec.W.shape,
-                                                    dtype=xp.float32))
-
-# In[ ]:
-
+    

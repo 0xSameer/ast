@@ -5,7 +5,7 @@
         "rnn": 0.3,
         "out": 0
     },
-    "sampling":
+    "extras":
     {
         "random_out": 0.7,
         "speech_noise": 0.25,

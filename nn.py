@@ -13,22 +13,26 @@ model if found
 Author: Sameer Bansal
 '''
 
+import argparse
 from seq2seq import SpeechEncoderDecoder
 from config import Config
-from dataloader import FisherDataLoader
+from dataloader import FisherDataLoader, SYMBOLS
 
+import chainer
 import cupy
 from chainer import cuda, Function, utils, Variable
 import numpy as np
 import os
 import chainer.functions as F
 from chainer import optimizers, serializers
+from chainer.optimizer import WeightDecay, GradientNoise, GradientClipping
 
+
+from tqdm import tqdm
 import random
-
 import pickle
 
-from chainer.optimizer import WeightDecay, GradientNoise, GradientClipping
+
 
 program_descrp = """run nmt experiments"""
 
@@ -121,7 +125,7 @@ class NN:
         # ---------------------------------------------------------------------
         # check last saved model
         # ---------------------------------------------------------------------
-        max_epoch = 0
+        self.max_epoch = 0
 
         print("Checking for model in: {0:s}".format(self.model_dir))
 
@@ -136,18 +140,78 @@ class NN:
             print('model found = \n{0:s}'.format(max_model_fil))
             serializers.load_npz(max_model_fil, self.model)
             print("finished loading ..")
-            max_epoch = int(max_model_fil.split('_')[-1].split('.')[0])
+            self.max_epoch = int(max_model_fil.split('_')[-1].split('.')[0])
         else:
             print("-"*80)
             print('model not found')
 
 
-    def train_epoch(self):
+    def train_epoch(self, set_key):
         total_loss = 0
-        for batch in self.data_loader.get_batch(32, train=True, labels=True):print(b["X"].shape, b["y"].shape);
+        n_utts = self.data_loader.n_utts[set_key]
+        batch_size = self.cfg.train["batch_size"]
+        n_batches = 0
 
+        with tqdm(total=n_utts, ncols=80) as pbar:
+            for batch in self.data_loader.get_batch(batch_size, 
+                                                    set_key, 
+                                                    train=True, 
+                                                    labels=True):
+                # print(batch["X"].shape, batch["y"].shape)
 
-    
+                with chainer.using_config('train', True):
+                    loss = self.model.forward_loss(X=batch['X'], 
+                                                   y=batch['y'])
+                    self.model.cleargrads()
+                    loss.backward()
+                    self.optimizer.update()
+                # end weights update
+
+                """
+                Collect loss values for reporting
+                Loss is normalized with the sequence length
+                """
+                loss_val = float(loss.data) / len(batch['y'])
+                n_batches += 1
+                total_loss += loss_val
+                avg_loss = total_loss / n_batches
+                pbar.set_description('loss={0:0.4f}'.format(avg_loss))
+                pbar.update(len(batch["X"]))
+                
+            # end for each batch
+        # end progress bar
+        print("Epoch complete")
+        print("Avg epoch loss = {0:.4f}".format(avg_loss))
+        return avg_loss
+
+    def predict(self, set_key):
+        n_utts = self.data_loader.n_utts[set_key]
+        batch_size = self.cfg.train["batch_size"]
+        n_batches = 0
+        preds = []
+        stop_limit = self.cfg.train["data"]["max_pred"]
+
+        with tqdm(total=n_utts, ncols=80) as pbar:
+            for batch in self.data_loader.get_batch(batch_size, 
+                                                    set_key, 
+                                                    train=True, 
+                                                    labels=True):
+
+                # Training mode not enabled
+                with chainer.using_config('train', False):
+                    p = self.model.predict(batch['X'], 
+                                           SYMBOLS.GO_ID,
+                                           SYMBOLS.EOS_ID,
+                                           stop_limit)
+                    preds.extend(zip(batch["utts"], p))
+
+                pbar.update(len(batch["X"]))
+                
+            # end for each batch
+        # end progress bar
+        print("predictions complete", print(len(preds)))
+        return preds
+
 
 
 cfg_path = "./experiments/es_en_20h"
@@ -173,6 +237,27 @@ haha = F.expand_dims(xp.load(test_file), 0)
 
 
 # def main():
+    # parser = argparse.ArgumentParser(description=program_descrp)
+    # parser.add_argument('-m','--cfg_path', help='path for model config',
+    #                     required=True)
+    # parser.add_argument('-e','--epochs', help='num epochs',
+    #                     required=True)
+
+    # args = vars(parser.parse_args())
+
+    # cfg_path = args['cfg_path']
+
+    # epochs = int(args['epochs'])
+
+    # print("number of epochs={0:d}".format(epochs))
+
+    
+
+# # end main
+# # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# if __name__ == "__main__":
 #     parser = argparse.ArgumentParser(description=program_descrp)
 #     parser.add_argument('-m','--cfg_path', help='path for model config',
 #                         required=True)
@@ -185,13 +270,9 @@ haha = F.expand_dims(xp.load(test_file), 0)
 
 #     epochs = int(args['epochs'])
 
+#     nn = NN(cfg_path)
+
 #     print("number of epochs={0:d}".format(epochs))
 
-    
 
-# # end main
-# # -----------------------------------------------------------------------------
-# # -----------------------------------------------------------------------------
-# if __name__ == "__main__":
-#     main()
-# # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
