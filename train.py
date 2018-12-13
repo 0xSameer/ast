@@ -4,7 +4,14 @@
 Train models
 """
 
-from nn import *
+from nn import NN
+from eval import Eval
+
+import argparse
+import os
+from chainer import serializers
+
+program_descrp = """Train and evaluate NN model"""
 
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":

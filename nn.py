@@ -13,11 +13,9 @@ model if found
 Author: Sameer Bansal
 '''
 
-import argparse
 from seq2seq import SpeechEncoderDecoder
 from config import Config
 from dataloader import FisherDataLoader, SYMBOLS
-from eval import Eval
 
 import chainer
 import cupy
@@ -35,7 +33,7 @@ import pickle
 
 
 
-program_descrp = """run nmt experiments"""
+program_descrp = """create and manage NN model"""
 
 _ADAM = 0
 _SGD = 1
