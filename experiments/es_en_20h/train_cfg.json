@@ -1,7 +1,7 @@
 {
     "seed": "seed-ast-20h",
     "gpuid": 1,
-    "iters_save_model": 20,
+    "iters_save": 20,
     "train_set": "fisher_train",
     "dev_set": "fisher_dev",
     "data":
@@ -23,7 +23,7 @@
     "optimizer":
         {
             "type": 0,
-            "lr": 0.001,
+            "lr": 0.0002,
             "l2": 0.0001,
             "grad_clip": 2,
             "grad_noise_eta": 0,

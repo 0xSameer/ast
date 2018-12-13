@@ -162,3 +162,20 @@ class FisherDataLoader(DataLoader):
                 batch_data['y'].to_gpu(self.gpuid)
 
             yield batch_data
+
+    
+    def get_hyps(self, preds):
+        dec_key = self.data_cfg["dec_key"]
+        join_str = ' ' if dec_key.endswith('_w') else ''
+        en_hyps = {}
+        for utt, p in preds:
+            en_hyps[utt] = []
+            if type(p) == list:
+                t_str = join_str.join([self.vocab[dec_key]['i2w'][i].decode() for i in p])
+                if "bpe_w" in dec_key:
+                    t_str = t_str.replace("@@ ", "")
+                t_str = t_str[:t_str.find(SYMBOLS.EOS.decode())]
+                en_hyps[utt].extend(t_str.strip().split())
+            # end if prediction contains text
+        # end for all utts
+        return en_hyps

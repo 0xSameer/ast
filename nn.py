@@ -17,6 +17,7 @@ import argparse
 from seq2seq import SpeechEncoderDecoder
 from config import Config
 from dataloader import FisherDataLoader, SYMBOLS
+from eval import Eval
 
 import chainer
 import cupy
@@ -81,7 +82,7 @@ class NN:
         else:
             print("using SGD")
             self.optimizer = optimizers.SGD(lr=opt_cfg['lr'])
-
+        print("learning rate: {0:f}".format(opt_cfg['lr']))
         # Attach optimizer
         self.optimizer.setup(self.model)
 
@@ -180,8 +181,8 @@ class NN:
                 
             # end for each batch
         # end progress bar
-        print("Epoch complete")
-        print("Avg epoch loss = {0:.4f}".format(avg_loss))
+        # print("Epoch complete")
+        # print("Avg epoch loss = {0:.4f}".format(avg_loss))
         return avg_loss
 
     def predict(self, set_key):
@@ -203,76 +204,16 @@ class NN:
                                            SYMBOLS.GO_ID,
                                            SYMBOLS.EOS_ID,
                                            stop_limit)
-                    preds.extend(zip(batch["utts"], p))
+                    preds.extend(zip(batch["utts"], p.tolist()))
 
                 pbar.update(len(batch["X"]))
+
+                n_batches += 1
+
+                # if n_batches > 2:
+                #     break
                 
             # end for each batch
         # end progress bar
-        print("predictions complete", print(len(preds)))
+        print("predictions complete", len(preds))
         return preds
-
-
-
-cfg_path = "./experiments/es_en_20h"
-
-ha = NN(cfg_path)
-
-
-# metrics = Eval(cfg.eval_path, cfg.n_evals)
-# print(metrics.refs[:5])
-
-
-xp = cuda.cupy if ha.cfg.train["gpuid"] >= 0 else np
-
-
-test_file = "../speech2text/mfcc_13dim/fisher_dev/20051016_180547_265_fsp-B-80.npy"
-
-if ha.cfg.train["gpuid"] >= 0:
-    cuda.get_device(ha.cfg.train["gpuid"]).use()
-haha = F.expand_dims(xp.load(test_file), 0)
-
-# model = SpeechEncoderDecoder(cfg)
-# model.to_gpu(cfg.train["gpuid"])
-
-
-# def main():
-    # parser = argparse.ArgumentParser(description=program_descrp)
-    # parser.add_argument('-m','--cfg_path', help='path for model config',
-    #                     required=True)
-    # parser.add_argument('-e','--epochs', help='num epochs',
-    #                     required=True)
-
-    # args = vars(parser.parse_args())
-
-    # cfg_path = args['cfg_path']
-
-    # epochs = int(args['epochs'])
-
-    # print("number of epochs={0:d}".format(epochs))
-
-    
-
-# # end main
-# # -----------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------
-# if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description=program_descrp)
-#     parser.add_argument('-m','--cfg_path', help='path for model config',
-#                         required=True)
-#     parser.add_argument('-e','--epochs', help='num epochs',
-#                         required=True)
-
-#     args = vars(parser.parse_args())
-
-#     cfg_path = args['cfg_path']
-
-#     epochs = int(args['epochs'])
-
-#     nn = NN(cfg_path)
-
-#     print("number of epochs={0:d}".format(epochs))
-
-
-# -----------------------------------------------------------------------------
