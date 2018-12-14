@@ -5,12 +5,6 @@
         "rnn": 0.3,
         "out": 0
     },
-    "extras":
-    {
-        "random_out": 0.7,
-        "speech_noise": 0.25,
-        "teach_ratio": 0.8
-    },
     "rnn_config": 
     {
         "bi_rnn": true,

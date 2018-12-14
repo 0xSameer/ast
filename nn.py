@@ -150,6 +150,9 @@ class NN:
         n_utts = self.data_loader.n_utts[set_key]
         batch_size = self.cfg.train["batch_size"]
         n_batches = 0
+        random_out = self.cfg.train["extras"]["random_out"]
+        add_noise = self.cfg.train["extras"]["speech_noise"]
+        teach_ratio = self.cfg.train["extras"]["teach_ratio"]
 
         with tqdm(total=n_utts, ncols=80) as pbar:
             for batch in self.data_loader.get_batch(batch_size, 
@@ -160,7 +163,10 @@ class NN:
 
                 with chainer.using_config('train', True):
                     loss = self.model.forward_loss(X=batch['X'], 
-                                                   y=batch['y'])
+                                                   y=batch['y'],
+                                                   teach_ratio=teach_ratio,
+                                                   random_out=random_out,
+                                                   add_noise=add_noise)
                     self.model.cleargrads()
                     loss.backward()
                     self.optimizer.update()
@@ -213,5 +219,5 @@ class NN:
                 
             # end for each batch
         # end progress bar
-        print("predictions complete", len(preds))
+        # print("predictions complete", len(preds))
         return preds

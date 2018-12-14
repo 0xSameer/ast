@@ -211,15 +211,15 @@ class SpeechEncoderDecoder(chainer.Chain):
         # Make the batch size as the first dimension
         self.enc_states = F.swapaxes(self.enc_states, 0, 1)
 
-    def encode(self, X):
+    def encode(self, X, add_noise=0):
         # ---------------------------------------------------------------------
         # check whether to add noise to speech input
         # ---------------------------------------------------------------------
-        if self.cfg["extras"]["speech_noise"] > 0 and chainer.config.train:
+        if add_noise > 0 and chainer.config.train:
             # due to CUDA issues with random number generator
             # creating a numpy array and moving to GPU
             noise = Variable(np.random.normal(1.0,
-                                          self.cfg["extras"]["speech_noise"],
+                                              add_noise,
                                               size=X.shape).astype(np.float32))
             if self.gpuid >= 0:
                 noise.to_gpu(self.gpuid)
@@ -303,12 +303,12 @@ class SpeechEncoderDecoder(chainer.Chain):
         return predicted_out, ht, alphas
         
 
-    def forward_loss(self, X, y):
+    def forward_loss(self, X, y, teach_ratio, random_out=0, add_noise=0):
         xp = cuda.cupy if self.gpuid >= 0 else np
         batch_size = X.shape[0]
         
         # encode input
-        self.encode(X)
+        self.encode(X, add_noise=add_noise)
         
         # initialize decoder LSTM to final encoder state
         self.set_decoder_state()
@@ -320,8 +320,6 @@ class SpeechEncoderDecoder(chainer.Chain):
         Compute loss at each predicted step for target text
         """
         loss = 0
-        teacher_ratio = self.cfg["extras"]["teach_ratio"]
-        
         """
         Initialize attention to zeros
         """
@@ -338,7 +336,7 @@ class SpeechEncoderDecoder(chainer.Chain):
             Always use true token for GO and EOS
             """
             if (i > 0) and (i < (len(y)-2)):
-                use_true = random.random() < teacher_ratio
+                use_true = random.random() < teach_ratio
                 if use_true:
                     decoder_input = curr_word
             else:
@@ -362,13 +360,13 @@ class SpeechEncoderDecoder(chainer.Chain):
             word type from the vocabulary
             """
             target_word = xp.copy(next_word.data)
-            if self.cfg["extras"]["random_out"] > 0:
+            if random_out > 0:
                 # sample and replace each element in the batch
                 # if not special symbol < 4
                 n_special = len(SYMBOLS.START_VOCAB)
                 for i in range(len(target_word)):
                     if ((int(target_word[i]) >= n_special) and 
-                        (random.random() > self.cfg["extras"]["random_out"])):
+                        (random.random() > random_out)):
                         target_word[i] = xp.random.randint(n_special, 
                                     self.cfg["rnn_config"]["dec_vocab_size"]+1)
             # end replace target word
