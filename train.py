@@ -47,7 +47,7 @@ if __name__ == "__main__":
     max_epoch = start_epoch+epochs
     for epoch in range(start_epoch, max_epoch):
         print("-"*80)
-        print("Experment: {0:s}, epoch: {1:d}, gpu: {2:d}".format(cfg_path,
+        print("Experment: {0:s} epoch: {1:d} gpu: {2:d}".format(cfg_path,
                                                                   epoch,
                                                                   nn.gpuid))
         print("-"*80)
