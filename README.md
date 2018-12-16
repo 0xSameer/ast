@@ -16,7 +16,7 @@ We preprocessed the English translations released by:
 
 [*Improved Speech-to-Text Translation with the Fisher and Callhome Spanish–English Speech Translation Corpus*, Matt Post, Gaurav Kumar, Adam Lopez, Damianos Karakos, Chris Callison-Burch and Sanjeev Khudanpur, IWSLT 2013](https://joshua.incubator.apache.org/data/fisher-callhome-corpus)
 
-and make them available here. 
+and make them available here.
 
 Fisher Spanish speech data is available from [LDC (*LDC2010S01*) ](https://catalog.ldc.upenn.edu/LDC2010S01)
 
@@ -43,9 +43,11 @@ Installation:
 
 ```pip install chainer```
 
-5) check if Chainer detects GPU support:
+5) check if Chainer detects GPU support. Launch python:
 
 ```
+$ python
+
 Python 3.7.1
 [GCC 7.3.0] :: Anaconda, Inc. on linux
 Type "help", "copyright", "credits" or "license" for more information.
@@ -54,7 +56,7 @@ Type "help", "copyright", "credits" or "license" for more information.
 True
 >>> chainer.backends.cuda.cudnn_enabled
 True
->>> 
+>>>
 ```
 
 6) install NLTK. Used to extract stop word lists for target languages, and for computing evaluation metrics such as BLEU score.
