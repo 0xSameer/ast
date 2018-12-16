@@ -112,11 +112,11 @@ class NN:
     def get_model(self):
         # Define training related paths
         self.model_fname = os.path.join(self.model_dir, "seq2seq.model")
-        
+
         """
         Create seq2seq model object
         """
-        self.model = SpeechEncoderDecoder(self.gpuid, 
+        self.model = SpeechEncoderDecoder(self.gpuid,
                                           self.cfg.model)
 
         # Move model to gpu id
@@ -155,14 +155,14 @@ class NN:
         teach_ratio = self.cfg.train["extras"]["teach_ratio"]
 
         with tqdm(total=n_utts, ncols=80) as pbar:
-            for batch in self.data_loader.get_batch(batch_size, 
-                                                    set_key, 
-                                                    train=True, 
+            for batch in self.data_loader.get_batch(batch_size,
+                                                    set_key,
+                                                    train=True,
                                                     labels=True):
                 # print(batch["X"].shape, batch["y"].shape)
 
                 with chainer.using_config('train', True):
-                    loss = self.model.forward_loss(X=batch['X'], 
+                    loss = self.model.forward_loss(X=batch['X'],
                                                    y=batch['y'],
                                                    teach_ratio=teach_ratio,
                                                    random_out=random_out,
@@ -182,7 +182,7 @@ class NN:
                 avg_loss = total_loss / n_batches
                 pbar.set_description('loss={0:0.4f}'.format(avg_loss))
                 pbar.update(len(batch["X"]))
-                
+
             # end for each batch
         # end progress bar
         # print("Epoch complete")
@@ -197,14 +197,14 @@ class NN:
         stop_limit = self.cfg.train["data"]["max_pred"]
 
         with tqdm(total=n_utts, ncols=80) as pbar:
-            for batch in self.data_loader.get_batch(batch_size, 
-                                                    set_key, 
-                                                    train=True, 
-                                                    labels=True):
+            for batch in self.data_loader.get_batch(batch_size,
+                                                    set_key,
+                                                    train=False,
+                                                    labels=False):
 
                 # Training mode not enabled
                 with chainer.using_config('train', False):
-                    p = self.model.predict(batch['X'], 
+                    p = self.model.predict(batch['X'],
                                            SYMBOLS.GO_ID,
                                            SYMBOLS.EOS_ID,
                                            stop_limit)
@@ -216,8 +216,62 @@ class NN:
 
                 # if n_batches > 2:
                 #     break
-                
+
             # end for each batch
         # end progress bar
         # print("predictions complete", len(preds))
         return preds
+
+    def decode_beam_step(self, decode_entry, beam_width):
+        xp = cuda.cupy if model.gpuid >= 0 else np
+
+        with chainer.using_config('train', False):
+
+            word_id, dec_state, attn_v = (decode_entry["hyp"][-1],
+                                          decode_entry["dec_state"],
+                                          decode_entry["attn_v"])
+
+            # set decoder state
+            self.model.set_decoder_states(dec_state)
+
+            # intialize starting word symbol
+            curr_word = Variable(xp.full((1,), word_id, dtype=xp.int32))
+
+            prob_out = {}
+            prob_print_str = []
+
+            # -----------------------------------------------------------------
+            # decode and predict
+            pred_out, ht, alphas = self.model.decode_step(curr_word, attn_v)
+            # -----------------------------------------------------------------
+            # Get top N conditional probabilities
+            # -----------------------------------------------------------------
+            pred_probs = xp.asnumpy(F.log_softmax(pred_out).data[0])
+            top_n_probs = xp.argsort(pred_probs)[-beam_width:]
+
+            new_entries = []
+
+            curr_dec_state = get_decoder_states()
+
+            # -----------------------------------------------------------------
+            # Uncomment code to check if EOS is 3 times more likely
+            # -----------------------------------------------------------------
+            # # check top prob EOS:
+            # pruned_top_probs = []
+            # for pi in top_n_probs:
+            #     if top_n_probs[0] == EOS_ID:
+            #         if pred_probs[EOS_ID] >= 3*pred_probs[top_n_probs[1]]:
+            # -----------------------------------------------------------------
+
+            for pi in top_n_probs[::-1]:
+                new_entry = {}
+                new_entry["hyp"] = decode_entry["hyp"] + [pi]
+                new_entry["score"] = decode_entry["score"] + pred_probs[pi]
+                new_entry["dec_state"] = curr_dec_state
+                new_entry["attn_v"] = ht
+                new_entry["attn_history"] = decode_entry["attn_history"] + [xp.squeeze(alphas.data)]
+
+                new_entries.append(new_entry)
+
+        # end with chainer test mode
+        return new_entries
