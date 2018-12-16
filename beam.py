@@ -123,7 +123,9 @@ if __name__ == "__main__":
     print(preds)
     hyps = nn.data_loader.get_hyps(preds.items())
 
-    # mbleu = metrics.calc_bleu(hyps) * 100
+    mbleu = metrics.calc_bleu(hyps) * 100
+
+    print("BLEU = {0:.2f}".format(bleu))
 
     out_fname = os.path.join(cfg_path,
                 "{0:s}_attn_N-{1:d}_K-{2:d}_W-{3:.2f}.en".format(set_key,N,K,W))
