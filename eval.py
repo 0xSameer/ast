@@ -13,16 +13,16 @@ class Eval:
     def __init__(self, path: str, n_evals: int) -> None:
         self.ids = []
 
-        with open(os.path.join(path, "eval.ids"), 
-                  "r", encoding="utf-8") as id_f:
-            self.ids = [line.strip() for line in id_f]
+        with open(os.path.join(path, "eval.ids"),
+                "r", encoding="utf-8") as id_f:
+          self.ids = [line.strip() for line in id_f]
 
         self.refs = []
         for i in range(n_evals):
-            self.refs.append([])
-            with open(os.path.join(path, "ref.en{0:d}".format(i)), 
-                      "r", encoding="utf-8") as ref_f:
-                self.refs[i] = [line.strip().split() for line in ref_f]
+          self.refs.append([])
+          with open(os.path.join(path, "ref.en{0:d}".format(i)),
+                    "r", encoding="utf-8") as ref_f:
+              self.refs[i] = [line.strip().split() for line in ref_f]
         self.refs = list(zip(*self.refs))
     # end init
 
@@ -36,4 +36,13 @@ class Eval:
                               smoothing_function=smooth_fun.method2)
 
         return b_score_value
+
+
+    def write_to_file(self, hyps, fname):
+
+        with open(fname, "w", encoding="utf-8") as out_f:
+            for u in self.ids:
+                out_f.write("{0:s}\n".format(" ".join(hyps[u])))
+            # end for each utt
+        # end file write
 

@@ -452,7 +452,7 @@ class SpeechEncoderDecoder(chainer.Chain):
         return rnn_states
         # ---------------------------------------------------------------------
 
-    def get_decoder_states():
+    def get_decoder_states(self):
         rnn_states = {"c": [], "h": []}
         # ---------------------------------------------------------------------
         # get the hidden and cell state (LSTM) of the first RNN in the decoder
@@ -464,16 +464,12 @@ class SpeechEncoderDecoder(chainer.Chain):
         return rnn_states
         # ---------------------------------------------------------------------
 
-    def set_decoder_states(rnn_states):
+    def set_decoder_states(self, rnn_states):
         # ---------------------------------------------------------------------
         # set the hidden and cell state (LSTM) for the decoder
         # ---------------------------------------------------------------------
         for i, dec in enumerate(self.rnn_dec):
-            if self.m_cfg['rnn_unit'] == RNN_LSTM:
-                self[dec].set_state(rnn_states["c"][i], rnn_states["h"][i])
-            else:
-                self[dec].set_state(rnn_states["h"][i])
-            # end if
+            self[dec].set_state(rnn_states["c"][i], rnn_states["h"][i])
         # end for all layers
         # ---------------------------------------------------------------------
 

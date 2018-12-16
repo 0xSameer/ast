@@ -222,8 +222,18 @@ class NN:
         # print("predictions complete", len(preds))
         return preds
 
+    def init_hyp(self):
+        xp = cuda.cupy if self.gpuid >= 0 else np
+        beam_entry = {"hyp": [SYMBOLS.GO_ID], "score": 0}
+        beam_entry["dec_state"] = self.model.get_encoder_states()
+        a_units = self.model.cfg["rnn_config"]['attn_units']
+        ht = Variable(xp.zeros((1, a_units), dtype=xp.float32))
+        beam_entry["attn_v"] = ht
+        beam_entry["attn_history"] = []
+        return beam_entry
+
     def decode_beam_step(self, decode_entry, beam_width):
-        xp = cuda.cupy if model.gpuid >= 0 else np
+        xp = cuda.cupy if self.gpuid >= 0 else np
 
         with chainer.using_config('train', False):
 
@@ -251,7 +261,7 @@ class NN:
 
             new_entries = []
 
-            curr_dec_state = get_decoder_states()
+            curr_dec_state = self.model.get_decoder_states()
 
             # -----------------------------------------------------------------
             # Uncomment code to check if EOS is 3 times more likely
@@ -275,3 +285,28 @@ class NN:
 
         # end with chainer test mode
         return new_entries
+
+    def decode_beam(self, X, stop_limit, N, K):
+        with chainer.using_config('train', False):
+            # encode input
+            self.model.encode(X)
+
+            n_best = []
+            n_best.append(self.init_hyp())
+
+            for i in range(stop_limit):
+                all_non_eos = [1 if e["hyp"][-1] != SYMBOLS.EOS_ID
+                                else 0 for e in n_best]
+                if sum(all_non_eos) == 0:
+                    break
+
+                curr_entries = []
+                for e in n_best:
+                    if e["hyp"][-1] != SYMBOLS.EOS_ID:
+                        curr_entries.extend(self.decode_beam_step(e, beam_width=K))
+                    else:
+                        curr_entries.append(e)
+
+                n_best = sorted(curr_entries, reverse=True,
+                                key=lambda t: t["score"])[:N]
+        return n_best
