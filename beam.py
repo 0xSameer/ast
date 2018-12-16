@@ -37,7 +37,7 @@ def get_best_hyps(utts_beam, W):
 
         rerank_hyp = rerank_hypothesis(utts_beam[u], weight=W)
 
-        preds[u] = [i for i in rerank_hyp[0][0] if i >= 4]
+        preds[u] = [i for i in rerank_hyp[0][0]]
 
     return preds
 
@@ -59,6 +59,9 @@ if __name__ == "__main__":
     parser.add_argument('-w','--W', help='len normalization weight',
                         required=True)
 
+    parser.add_argument('--resume', action='store_true',
+                        help='Resume the training from snapshot')
+
     args = vars(parser.parse_args())
 
     cfg_path = args['cfg_path']
@@ -68,6 +71,8 @@ if __name__ == "__main__":
     W = float(args['W'])
 
     set_key = args['S']
+
+    resume = bool(args['resume'])
 
     """
     Create the model and load previously stored parameters
@@ -87,43 +92,50 @@ if __name__ == "__main__":
     print("Beam for: {0:s} gpu: {1:d}".format(cfg_path, nn.gpuid))
     print("-"*80)
 
-    # Maximum prediction length
-    stop_limit = nn.cfg.train["data"]["max_pred"]
+    if resume:
+        print("Loading saved beam results")
+        beam = pickle.load(open(os.path.join(cfg_path,
+                    "{0:s}_attn_N-{1:d}_K-{2:d}.beam".format(set_key,N,K)),
+                    "rb"))
+    else:
+        print("Computing beam results")
+        # Maximum prediction length
+        stop_limit = nn.cfg.train["data"]["max_pred"]
 
-    # For each utterance, store the beam results
-    beam = {}
+        # For each utterance, store the beam results
+        beam = {}
 
-    n_utts = nn.data_loader.n_utts[set_key]
-    # Loop over all utterances
-    with tqdm(total=n_utts, ncols=80) as pbar:
-        for utt in nn.data_loader.get_batch(1,
-                                            set_key,
-                                            train=False,
-                                            labels=False):
+        n_utts = nn.data_loader.n_utts[set_key]
+        # Loop over all utterances
+        with tqdm(total=n_utts, ncols=80) as pbar:
+            for utt in nn.data_loader.get_batch(1,
+                                                set_key,
+                                                train=False,
+                                                labels=False):
 
-            # Training mode not enabled
-            n_best = nn.decode_beam(utt["X"],
-                                 stop_limit=stop_limit,
-                                 N=N, K=K)
+                # Training mode not enabled
+                n_best = nn.decode_beam(utt["X"],
+                                     stop_limit=stop_limit,
+                                     N=N, K=K)
 
-            u = utt['utts'][0]
-            beam[u] = [(e["hyp"], e["score"], e["attn_history"]) for e in n_best]
+                u = utt['utts'][0]
+                beam[u] = [(e["hyp"], e["score"], e["attn_history"]) for e in n_best]
 
-            pbar.update(len(utt["X"]))
+                pbar.update(len(utt["X"]))
 
 
-    # Save beam results
-    print("saving hyps")
-    pickle.dump(beam, open(os.path.join(cfg_path,
-                "{0:s}_attn_N-{1:d}_K-{2:d}.beam".format(set_key,N,K)),
-                "wb"))
+        # Save beam results
+        print("saving hyps")
+        pickle.dump(beam, open(os.path.join(cfg_path,
+                    "{0:s}_attn_N-{1:d}_K-{2:d}.beam".format(set_key,N,K)),
+                    "wb"))
 
 
     preds = get_best_hyps(beam, W)
-    print(preds)
+    # print(preds)
     hyps = nn.data_loader.get_hyps(preds.items())
 
-    mbleu = metrics.calc_bleu(hyps) * 100
+    bleu = metrics.calc_bleu(hyps) * 100
 
     print("BLEU = {0:.2f}".format(bleu))
 

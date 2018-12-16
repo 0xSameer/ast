@@ -58,11 +58,11 @@ class FisherDataLoader(DataLoader):
         self.info = pickle.load(open(data_cfg["info_path"], "rb"))
 
         print("Organising data into buckets")
-        self.buckets = prep_buckets.buckets_main(self.model_dir, 
-                                            data_cfg['buckets_num'], 
-                                            data_cfg['buckets_width'], 
-                                            key="sp", 
-                                            scale=data_cfg["train_scale"], 
+        self.buckets = prep_buckets.buckets_main(self.model_dir,
+                                            data_cfg['buckets_num'],
+                                            data_cfg['buckets_width'],
+                                            key="sp",
+                                            scale=data_cfg["train_scale"],
                                             seed='haha',
                                             info_path=data_cfg['info_path'])
 
@@ -98,7 +98,7 @@ class FisherDataLoader(DataLoader):
         SP_PATH = os.path.join(self.data_cfg["speech_path"], set_key)
         utt_path = os.path.join(SP_PATH, "{0:s}.npy".format(utt))
         if not os.path.exists(utt_path):
-            utt_path = os.path.join(SP_PATH, utt.split('_',1)[0], 
+            utt_path = os.path.join(SP_PATH, utt.split('_',1)[0],
                                     "{0:s}.npy".format(utt))
         x_data = xp.load(utt_path)[:max_sp]
         # Drop frames if training
@@ -112,12 +112,12 @@ class FisherDataLoader(DataLoader):
         xp = cuda.cupy if self.gpuid >= 0 else np
 
         batches = []
-        
+
         num_b = self.buckets[set_key]["num_b"]
         width_b = self.buckets[set_key]["width_b"]
         max_sp = (num_b+1)*width_b
 
-        
+
         if labels:
             dec_key = self.data_cfg["dec_key"]
             max_pred = self.data_cfg["max_pred"]
@@ -143,8 +143,8 @@ class FisherDataLoader(DataLoader):
 
             for u in utts:
                 batch_data["X"].append(self._load_speech(u, set_key, max_sp))
-                if labels:                    
-                    en_ids = [self.vocab[dec_key]['w2i'].get(w, SYMBOLS.UNK_ID) 
+                if labels:
+                    en_ids = [self.vocab[dec_key]['w2i'].get(w, SYMBOLS.UNK_ID)
                               for w in self.map[set_key][u][dec_key]]
 
                     y_ids = [SYMBOLS.GO_ID] + en_ids[:max_pred-2] + [SYMBOLS.EOS_ID]
@@ -152,18 +152,18 @@ class FisherDataLoader(DataLoader):
 
             # end for utts
             # include the utt ids
-            batch_data['utts'].extend(utts) 
-            batch_data['X'] = F.pad_sequence(batch_data['X'], 
+            batch_data['utts'].extend(utts)
+            batch_data['X'] = F.pad_sequence(batch_data['X'],
                                              padding=SYMBOLS.PAD_ID)
             batch_data['X'].to_gpu(self.gpuid)
             if labels:
-                batch_data['y'] = F.pad_sequence(batch_data['y'], 
+                batch_data['y'] = F.pad_sequence(batch_data['y'],
                                              padding=SYMBOLS.PAD_ID)
                 batch_data['y'].to_gpu(self.gpuid)
 
             yield batch_data
 
-    
+
     def get_hyps(self, preds):
         dec_key = self.data_cfg["dec_key"]
         join_str = ' ' if dec_key.endswith('_w') else ''
@@ -171,10 +171,12 @@ class FisherDataLoader(DataLoader):
         for utt, p in preds:
             en_hyps[utt] = []
             if type(p) == list:
-                t_str = join_str.join([self.vocab[dec_key]['i2w'][i].decode() for i in p])
+                t_str = join_str.join([self.vocab[dec_key]['i2w'][i].decode()
+                                       for i in p if i >= len(SYMBOLS.START_VOCAB)])
                 if "bpe_w" in dec_key:
                     t_str = t_str.replace("@@ ", "")
-                t_str = t_str[:t_str.find(SYMBOLS.EOS.decode())]
+                # if t_str.find(SYMBOLS.EOS.decode()) >= 0:
+                #     t_str = t_str[:t_str.find(SYMBOLS.EOS.decode())]
                 en_hyps[utt].extend(t_str.strip().split())
             # end if prediction contains text
         # end for all utts
