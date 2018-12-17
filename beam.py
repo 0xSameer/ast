@@ -95,7 +95,7 @@ if __name__ == "__main__":
     if resume:
         print("Loading saved beam results")
         beam = pickle.load(open(os.path.join(cfg_path,
-                    "{0:s}_attn_N-{1:d}_K-{2:d}.beam".format(set_key,N,K)),
+                    "{0:s}_beam_N-{1:d}_K-{2:d}.p".format(set_key,N,K)),
                     "rb"))
     else:
         print("Computing beam results")
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         # Save beam results
         print("saving hyps")
         pickle.dump(beam, open(os.path.join(cfg_path,
-                    "{0:s}_attn_N-{1:d}_K-{2:d}.beam".format(set_key,N,K)),
+                    "{0:s}_beam_N-{1:d}_K-{2:d}.p".format(set_key,N,K)),
                     "wb"))
 
 
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     print("BLEU = {0:.2f}".format(bleu))
 
     out_fname = os.path.join(cfg_path,
-                "{0:s}_attn_N-{1:d}_K-{2:d}_W-{3:.2f}.en".format(set_key,N,K,W))
+                "{0:s}_beam_N-{1:d}_K-{2:d}_W-{3:.2f}.en".format(set_key,N,K,W))
 
     metrics.write_to_file(hyps, out_fname)
     print("Predictions written to: {0:s}".format(out_fname))
