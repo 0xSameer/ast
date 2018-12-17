@@ -143,4 +143,5 @@ if __name__ == "__main__":
                 "{0:s}_attn_N-{1:d}_K-{2:d}_W-{3:.2f}.en".format(set_key,N,K,W))
 
     metrics.write_to_file(hyps, out_fname)
+    print("Predictions written to: {0:s}".format(out_fname))
 # -----------------------------------------------------------------------------
