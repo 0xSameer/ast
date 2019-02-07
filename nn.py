@@ -15,7 +15,7 @@ Author: Sameer Bansal
 
 from seq2seq import SpeechEncoderDecoder
 from config import Config
-from dataloader import FisherDataLoader, SYMBOLS
+from dataloader import FisherDataLoader, GlobalPhoneDataLoader, SYMBOLS
 
 import chainer
 import cupy
@@ -50,7 +50,13 @@ class NN:
         self.gpuid = self.cfg.train["gpuid"]
 
         # Load data dictionaries
-        self.data_loader = FisherDataLoader(self.cfg.train["data"],
+        if ('dataloader' in self.cfg.train["data"]) and (self.cfg.train["data"]['dataloader'] == "globalphone"):
+            self.data_loader = GlobalPhoneDataLoader(self.cfg.train["data"],
+                                                     self.model_dir,
+                                                     self.gpuid)
+
+        else:
+            self.data_loader = FisherDataLoader(self.cfg.train["data"],
                                             self.model_dir,
                                             self.gpuid)
 
