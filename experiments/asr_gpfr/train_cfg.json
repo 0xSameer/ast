@@ -1,0 +1,40 @@
+{
+    "seed": "seed-ast-20h",
+    "gpuid": 1,
+    "iters_save": 10,
+    "train_set": "train",
+    "dev_set": "dev",
+    "extras":
+    {
+        "random_out": 0,
+        "speech_noise": 0.25,
+        "teach_ratio": 0.8
+    },
+    "data":
+        {
+            "enc_key": "sp",
+            "dec_key": "bpe_w",
+            "dataloader": "globalphone",
+            "speech_path": "../pretrain_AST_input/gpFR/gpfr_data.dict",
+            "map_path": "../pretrain_AST_input/gpFR//gpfr_bpe_map.dict",
+            "vocab_path": "../pretrain_AST_input/gpFR/gpfr_bpe_train_vocab.dict",
+            "max_pred": 175,
+            "info_path": "../pretrain_AST_input/gpFR/info_gpfr.dict",
+            "refs_path": "../pretrain_AST_input/gpFR/refs",
+            "n_evals": 1,
+            "buckets_num": 20,
+            "buckets_width": 80,
+            "train_scale": 1,
+            "zero_input": 0.1
+        },
+    "optimizer":
+        {
+            "type": 0,
+            "lr": 0.001,
+            "l2": 0.0001,
+            "grad_clip": 2,
+            "grad_noise_eta": 0,
+            "freeze": []
+        },
+    "batch_size": 32
+}

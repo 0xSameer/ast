@@ -1,0 +1,57 @@
+{
+    "dropout": 
+    {
+        "embed": 0.3,
+        "rnn": 0.3,
+        "out": 0
+    },
+    "rnn_config": 
+    {
+        "bi_rnn": true,
+        "enc_layers": 3,
+        "dec_layers": 3,
+        "hidden_units": 512,
+        "embedding_units": 128,
+        "attn_units": 512,
+        "ln": false
+    },
+    "cnn_config": 
+    {
+        "bn": true,
+        "cnn_layers": 
+        [
+            {
+                "in_channels": null,
+                "out_channels": 128,
+                "ksize": [
+                    9,
+                    13
+                ],
+                "stride": [
+                    2,
+                    13
+                ],
+                "pad": [
+                    4,
+                    0
+                ]
+            },
+            {
+                "in_channels": null,
+                "out_channels": 512,
+                "ksize": [
+                    9,
+                    1
+                ],
+                "stride": [
+                    2,
+                    1
+                ],
+                "pad": [
+                    4,
+                    0
+                ]
+            }
+        ]
+    }
+}
