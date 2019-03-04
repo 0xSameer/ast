@@ -1,3 +1,6 @@
+# Author: S. Bansal
+# adapted by M. Stoian
+
 import os
 import sys
 import pickle
@@ -24,7 +27,7 @@ def check_argv():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("in_path", type=str)
     parser.add_argument("out_path", type=str)
-
+    parser.add_argument("bpe_limit", type=int)
 
     if len(sys.argv) == 1:
         parser.print_help()
@@ -38,12 +41,13 @@ def check_argv():
 args = check_argv()
 in_path = args.in_path #e.g. "../../pretrain_AST_input/gpFR/"
 out_path = args.out_path #e.g. "../../pretrain_AST_input/gpFR/"
+bpe_limit = int(args.bpe_limit)
 sets = ['train', 'dev', 'test']
 
 def read_bpe_text(c):
     all_words = []
     utt2words = {}
-    with open(os.path.join(in_path, "{0:s}.BPE_1000".format(c)), "r") as text_f,\
+    with open(os.path.join(in_path, "{0:s}.BPE_{1:d}".format(c, bpe_limit)), "r") as text_f,\
               open(os.path.join(in_path, "{0:s}.ids".format(c)), "r") as id_f:
         for u, line in tqdm(zip(id_f, text_f)):
             t = line.strip().split()
@@ -90,7 +94,7 @@ for c in sets:
     all_words = []
     utt2words = {}
 
-    with open(os.path.join(in_path, "{0:s}.BPE_1000".format(c)), "rb") as text_f, \
+    with open(os.path.join(in_path, "{0:s}.BPE_{1:d}".format(c, bpe_limit)), "rb") as text_f, \
                             open(os.path.join(in_path, "{0:s}.ids".format(c)), "r") as id_f, \
                             open(os.path.join(in_path, "{0:s}.clean.text".format(c)), "rb") as words_f:
         for i, t, e in zip(id_f, text_f, words_f):
