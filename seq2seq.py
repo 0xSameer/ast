@@ -92,9 +92,22 @@ class SpeechEncoderDecoder(chainer.Chain):
         a_units = RNN_CONFIG['attn_units']
         self.add_link("attn_Wa", L.Linear(RNN_CONFIG['hidden_units'],
                                           RNN_CONFIG['hidden_units']))
+        self.n_attn = 1 if 'n_attn' not in RNN_CONFIG else RNN_CONFIG['n_attn']
+        if self.n_attn > 1:
+            print(f"# Attention layers: {self.n_attn}")
+
+        feed_attn = True if 'feed_attn' not in self.cfg["rnn_config"] else \
+                            self.cfg["rnn_config"]['feed_attn']
+        print(f"Feed attention to next decode step: {feed_attn}")
+        for i in range(1, self.n_attn):
+            self.add_link(f"attn_Wa{i}", L.Linear(RNN_CONFIG['hidden_units'],
+                                                  RNN_CONFIG['hidden_units']))
         # Context layer = 1*h_units from enc + 1*h_units from dec
-        self.add_link("context", L.Linear(2*RNN_CONFIG['hidden_units'],
-                                          a_units))
+        # self.add_link("context", L.Linear(2*RNN_CONFIG['hidden_units'],
+        #                                   a_units))
+        self.add_link("context", L.Linear(
+                                    (self.n_attn+1)*RNN_CONFIG['hidden_units'],
+                                     a_units))
         """
         Add decoder layers
         Embedding layer
@@ -251,12 +264,12 @@ class SpeechEncoderDecoder(chainer.Chain):
                 self[dec].set_state(self[enc].c, self[enc].h)
         # ---------------------------------------------------------------------
 
-    def compute_context_vector(self, dec_h):
+    def compute_context_vector(self, dec_h, attn_Wa):
         batch_size, n_units = dec_h.shape
         # attention weights for the hidden states of each word in the input list
         # ---------------------------------------------------------------------
         # compute weights
-        ht = self.attn_Wa(dec_h)
+        ht = attn_Wa(dec_h)
         weights = F.batch_matmul(self.enc_states, ht)
         # ---------------------------------------------------------------------
         # '''
@@ -284,12 +297,23 @@ class SpeechEncoderDecoder(chainer.Chain):
         # ---------------------------------------------------------------------
         # apply rnn - input feeding, use previous ht
         # ---------------------------------------------------------------------
-        rnn_in = F.concat((embed_id, ht), axis=1)
+        feed_attn = True if 'feed_attn' not in self.cfg["rnn_config"] else \
+                    self.cfg["rnn_config"]['feed_attn']
+        if feed_attn:
+            rnn_in = F.concat((embed_id, ht), axis=1)
+        else:
+            rnn_in = embed_id
         h = self.feed_rnn(rnn_in, self.rnn_dec)
         # ---------------------------------------------------------------------
         # compute context vector
         # ---------------------------------------------------------------------
-        cv, alphas = self.compute_context_vector(h)
+        cv, alphas = self.compute_context_vector(h, self.attn_Wa)
+
+        for i in range(1, self.n_attn):
+            new_cv, _ = self.compute_context_vector(h, self[f'attn_Wa{i}'])
+            cv = F.concat((cv, new_cv), axis=1)
+
+        # concatenate with decoder hidden state
         cv_hdec = F.concat((cv, h), axis=1)
         # ---------------------------------------------------------------------
         # compute attentional hidden state
@@ -346,6 +370,7 @@ class SpeechEncoderDecoder(chainer.Chain):
             Decode current token -- we get the softmax output
             """
             predicted_out, ht, _ = self.decode_step(decoder_input, ht)
+            # predicted_out, _ = self.decode_step(decoder_input)
 
             """
             Set the decoder_input for the next step to the current
@@ -408,6 +433,7 @@ class SpeechEncoderDecoder(chainer.Chain):
         while npred < (stop_limit):
             # decode and predict
             pred_out, ht, _ = self.decode_step(curr_word, ht)
+            # pred_out, _ = self.decode_step(curr_word)
             pred_word = F.argmax(pred_out, axis=1)
             # -----------------------------------------------------------------
             # save prediction at this time step

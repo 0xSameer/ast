@@ -6,7 +6,7 @@
     "dev_set": "fisher_dev",
     "extras":
     {
-        "random_out": 0.7,
+        "random_out": 0,
         "speech_noise": 0.25,
         "teach_ratio": 0.8
     },
@@ -29,7 +29,7 @@
     "optimizer":
         {
             "type": 0,
-            "lr": 0.0001,
+            "lr": 0.001,
             "l2": 0.0001,
             "grad_clip": 2,
             "grad_noise_eta": 0,
