@@ -1,11 +1,11 @@
 {
-    "dropout": 
+    "dropout":
     {
         "embed": 0.3,
         "rnn": 0.3,
         "out": 0
     },
-    "rnn_config": 
+    "rnn_config":
     {
         "bi_rnn": true,
         "enc_layers": 3,
@@ -13,12 +13,14 @@
         "hidden_units": 512,
         "embedding_units": 128,
         "attn_units": 512,
+        "n_attn": 1,
+        "feed_attn": true,
         "ln": false
     },
-    "cnn_config": 
+    "cnn_config":
     {
         "bn": true,
-        "cnn_layers": 
+        "cnn_layers":
         [
             {
                 "in_channels": null,
