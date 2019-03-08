@@ -86,6 +86,19 @@ class SpeechEncoderDecoder(chainer.Chain):
                 self.add_link("{0:s}_ln".format(rnn_name),
                               L.LayerNormalization(enc_lstm_units))
         # end for enc rnn
+        # Add linear projection with Batch Norm
+        self.rnn_linear_proj = False
+        if 'linear_proj' in RNN_CONFIG and RNN_CONFIG['linear_proj']:
+            self.rnn_linear_proj = True
+            proj_units = RNN_CONFIG['hidden_units']
+            self.add_link(f"enc_proj", L.Linear(proj_units, proj_units))
+            self.add_link(f"enc_proj_bn", L.BatchNormalization((proj_units)))
+            # proj_units = RNN_CONFIG['hidden_units']
+            # for i in range(RNN_CONFIG['enc_layers']):
+            #     self.add_link(f"enc_proj{i}", L.Linear(proj_units, proj_units))
+            #     self.add_link(f"enc_proj{i}_bn",
+            #                   L.BatchNormalization((proj_units)))
+        print(f"RNN linear projection layer: {self.rnn_linear_proj}")
         """
         Add attention layers
         """
@@ -217,9 +230,26 @@ class SpeechEncoderDecoder(chainer.Chain):
         """
         if self.bi_rnn:
             h_rev = F.flipud(h_rev)
-            self.enc_states = F.concat((h_fwd, h_rev), axis=2)
+            rnn_states = F.concat((h_fwd, h_rev), axis=2)
         else:
-            self.enc_states = h_fwd
+            rnn_states = h_fwd
+
+        """
+        Check if linear projection layer required
+        """
+        if self.rnn_linear_proj == False:
+            self.enc_states = rnn_states
+        else:
+            for i in range(0, in_size):
+                currH = F.relu(self.enc_proj_bn(self.enc_proj(rnn_states[i])))
+                if i > 0:
+                    self.enc_states = F.concat((self.enc_states,
+                                      F.expand_dims(currH, 0)), axis=0)
+                else:
+                    self.enc_states = F.expand_dims(currH, 0)
+            # end for all hidden states
+        # end
+
 
         # Make the batch size as the first dimension
         self.enc_states = F.swapaxes(self.enc_states, 0, 1)
