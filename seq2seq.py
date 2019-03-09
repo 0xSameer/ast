@@ -91,13 +91,12 @@ class SpeechEncoderDecoder(chainer.Chain):
         if 'linear_proj' in RNN_CONFIG and RNN_CONFIG['linear_proj']:
             self.rnn_linear_proj = True
             proj_units = RNN_CONFIG['hidden_units']
-            self.add_link(f"enc_proj", L.Linear(proj_units, proj_units))
-            self.add_link(f"enc_proj_bn", L.BatchNormalization((proj_units)))
-            # proj_units = RNN_CONFIG['hidden_units']
-            # for i in range(RNN_CONFIG['enc_layers']):
-            #     self.add_link(f"enc_proj{i}", L.Linear(proj_units, proj_units))
-            #     self.add_link(f"enc_proj{i}_bn",
-            #                   L.BatchNormalization((proj_units)))
+            # self.add_link(f"enc_proj", L.Linear(proj_units, proj_units))
+            # self.add_link(f"enc_proj_bn", L.BatchNormalization((proj_units)))
+            for i in range(RNN_CONFIG['enc_layers']):
+                self.add_link(f"enc_proj{i}", L.Linear(proj_units, proj_units))
+                self.add_link(f"enc_proj{i}_bn",
+                              L.BatchNormalization((proj_units)))
         print(f"RNN linear projection layer: {self.rnn_linear_proj}")
         """
         Add attention layers
@@ -237,22 +236,56 @@ class SpeechEncoderDecoder(chainer.Chain):
         """
         Check if linear projection layer required
         """
-        if self.rnn_linear_proj == False:
-            self.enc_states = rnn_states
-        else:
-            for i in range(0, in_size):
-                currH = F.relu(self.enc_proj_bn(self.enc_proj(rnn_states[i])))
-                if i > 0:
-                    self.enc_states = F.concat((self.enc_states,
-                                      F.expand_dims(currH, 0)), axis=0)
-                else:
-                    self.enc_states = F.expand_dims(currH, 0)
-            # end for all hidden states
-        # end
-
+        self.enc_states = rnn_states
 
         # Make the batch size as the first dimension
         self.enc_states = F.swapaxes(self.enc_states, 0, 1)
+
+    def forward_rnn_encode_proj(self, X):
+        # Reset rnn state
+        self.reset_rnn_state()
+        # Get input shape
+        in_size, batch_size, in_dim = X.shape
+        enc_states = X
+        for currL in range(len(self.rnn_enc)):
+            for i in range(in_size):
+                temp_f = F.expand_dims(F.dropout(self[self.rnn_enc[currL]](enc_states[i]),
+                                       ratio=self.cfg["dropout"]["rnn"]), 0)
+                # if bi-directional
+                if self.bi_rnn:
+                    temp_r = F.expand_dims(F.dropout(self[self.rnn_rev_enc[currL]](enc_states[-1]),
+                                           ratio=self.cfg["dropout"]["rnn"]), 0)
+
+                if i > 0:
+                    h_fwd = F.concat((h_fwd, temp_f), axis=0)
+                    if self.bi_rnn:
+                        h_rev = F.concat((h_rev, temp_r), axis=0)
+                else:
+                    h_fwd = temp_f
+                    if self.bi_rnn:
+                        h_rev = temp_r
+            # end current rnn layer
+            if self.bi_rnn:
+                h_rev = F.flipud(h_rev)
+                rnn_states = F.concat((h_fwd, h_rev), axis=2)
+            else:
+                rnn_states = h_fwd
+
+            """
+            Apply linear projection
+            """
+            for i in range(0, in_size):
+                currH = F.relu(self[f"enc_proj{currL}_bn"](self[f"enc_proj{currL}"](rnn_states[i])))
+                if i > 0:
+                    enc_states = F.concat((enc_states,
+                                      F.expand_dims(currH, 0)), axis=0)
+                else:
+                    enc_states = F.expand_dims(currH, 0)
+            # end for all hidden states
+        # end all layers
+
+        # Make the batch size as the first dimension
+        self.enc_states = F.swapaxes(enc_states, 0, 1)
 
     def encode(self, X, add_noise=0):
         # ---------------------------------------------------------------------
@@ -272,7 +305,10 @@ class SpeechEncoderDecoder(chainer.Chain):
         h = self.forward_cnn(X)
         # print("cnn out", h.shape)
         # call rnn logic
-        self.forward_rnn_encode(h)
+        if self.rnn_linear_proj == False:
+            self.forward_rnn_encode(h)
+        else:
+            self.forward_rnn_encode_proj(h)
         # print("rnn out", self.enc_states[0].shape)
 
 
