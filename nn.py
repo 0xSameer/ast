@@ -49,6 +49,10 @@ class NN:
         # Store gpuid locally
         self.gpuid = self.cfg.train["gpuid"]
 
+        # Initialize random seed
+        xp = cuda.cupy if self.gpuid >= 0 else np
+        random.seed(self.cfg.train["seed"])
+
         # Load data dictionaries
         if ('dataloader' in self.cfg.train["data"]) and (self.cfg.train["data"]['dataloader'] == "globalphone"):
             self.data_loader = GlobalPhoneDataLoader(self.cfg.train["data"],
