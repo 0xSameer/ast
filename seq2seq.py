@@ -93,7 +93,7 @@ class SpeechEncoderDecoder(chainer.Chain):
             proj_units = RNN_CONFIG['hidden_units']
             # self.add_link(f"enc_proj", L.Linear(proj_units, proj_units))
             # self.add_link(f"enc_proj_bn", L.BatchNormalization((proj_units)))
-            for i in range(RNN_CONFIG['enc_layers']):
+            for i in range(RNN_CONFIG['enc_layers']-1):
                 self.add_link(f"enc_proj{i}", L.Linear(proj_units, proj_units))
                 self.add_link(f"enc_proj{i}_bn",
                               L.BatchNormalization((proj_units)))
@@ -274,14 +274,17 @@ class SpeechEncoderDecoder(chainer.Chain):
             """
             Apply linear projection
             """
-            for i in range(0, in_size):
-                currH = F.relu(self[f"enc_proj{currL}_bn"](self[f"enc_proj{currL}"](rnn_states[i])))
-                if i > 0:
-                    enc_states = F.concat((enc_states,
-                                      F.expand_dims(currH, 0)), axis=0)
-                else:
-                    enc_states = F.expand_dims(currH, 0)
-            # end for all hidden states
+            # print(f"Applying rnn {currL}")
+            if currL < (len(self.rnn_enc)-1):
+                # print(f"Applying linear linear_proj {currL}")
+                for i in range(0, in_size):
+                    currH = F.relu(self[f"enc_proj{currL}_bn"](self[f"enc_proj{currL}"](rnn_states[i])))
+                    if i > 0:
+                        enc_states = F.concat((enc_states,
+                                          F.expand_dims(currH, 0)), axis=0)
+                    else:
+                        enc_states = F.expand_dims(currH, 0)
+                # end for all hidden states
         # end all layers
 
         # Make the batch size as the first dimension
